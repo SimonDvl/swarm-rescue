@@ -17,9 +17,14 @@ from maps.map_medium_01 import MyMapMedium01
 from maps.map_medium_02 import MyMapMedium02
 
 from solutions.my_drone_eval import MyDroneEval
-
+from solutions.my_drone_fourmi import MyAntDrone
+from solutions.my_drone_lidar_communication import MyDroneLidarCommunication
+from solutions.my_new_drone_fourmi import MyNewDroneFourmi
 
 class MyDrone(MyDroneEval):
+    pass
+
+class MyAntDrone(MyAntDrone):
     pass
 
 
@@ -57,20 +62,20 @@ class Launcher:
         eval_config = EvalConfig(map_type=MyMapIntermediate01, nb_rounds=2)
         self.eval_plan.add(eval_config=eval_config)
 
-        eval_config = EvalConfig(map_type=MyMapIntermediate02)
-        self.eval_plan.add(eval_config=eval_config)
+        # eval_config = EvalConfig(map_type=MyMapIntermediate02)
+        # self.eval_plan.add(eval_config=eval_config)
 
-        zones_config: ZonesConfig = ()
-        eval_config = EvalConfig(map_type=MyMapMedium01, zones_config=zones_config, nb_rounds=1, config_weight=1)
-        self.eval_plan.add(eval_config=eval_config)
+        # zones_config: ZonesConfig = ()
+        # eval_config = EvalConfig(map_type=MyMapMedium01, zones_config=zones_config, nb_rounds=1, config_weight=1)
+        # self.eval_plan.add(eval_config=eval_config)
 
-        zones_config: ZonesConfig = (ZoneType.NO_COM_ZONE, ZoneType.NO_GPS_ZONE, ZoneType.KILL_ZONE)
-        eval_config = EvalConfig(map_type=MyMapMedium01, zones_config=zones_config, nb_rounds=1, config_weight=1)
-        self.eval_plan.add(eval_config=eval_config)
+        # zones_config: ZonesConfig = (ZoneType.NO_COM_ZONE, ZoneType.NO_GPS_ZONE, ZoneType.KILL_ZONE)
+        # eval_config = EvalConfig(map_type=MyMapMedium01, zones_config=zones_config, nb_rounds=1, config_weight=1)
+        # self.eval_plan.add(eval_config=eval_config)
 
-        zones_config: ZonesConfig = (ZoneType.NO_COM_ZONE, ZoneType.NO_GPS_ZONE, ZoneType.KILL_ZONE)
-        eval_config = EvalConfig(map_type=MyMapMedium02, zones_config=zones_config, nb_rounds=1, config_weight=1)
-        self.eval_plan.add(eval_config=eval_config)
+        # zones_config: ZonesConfig = (ZoneType.NO_COM_ZONE, ZoneType.NO_GPS_ZONE, ZoneType.KILL_ZONE)
+        # eval_config = EvalConfig(map_type=MyMapMedium02, zones_config=zones_config, nb_rounds=1, config_weight=1)
+        # self.eval_plan.add(eval_config=eval_config)
 
         self.number_drones = None
         self.time_step_limit = None
@@ -103,7 +108,7 @@ class Launcher:
                                           real_time_limit=self.real_time_limit,
                                           total_number_wounded_persons=self.number_wounded_persons)
 
-        playground = my_map.construct_playground(drone_type=MyDrone)
+        playground = my_map.construct_playground(drone_type=MyNewDroneFourmi)
 
         num_round_str = str(num_round)
         team_number_str = str(self.team_info.team_number).zfill(2)
