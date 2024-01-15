@@ -9,6 +9,7 @@ from spg_overlay.utils.utils import normalize_angle, sign
 
 
 class MyDroneQLearningSimple(DroneAbstract):
+    # Juste de l'exploration pour le moment
     def __init__(self,
                  identifier: Optional[int] = None,
                  misc_data: Optional[MiscData] = None,
@@ -22,7 +23,7 @@ class MyDroneQLearningSimple(DroneAbstract):
         self.learning_rate = 0.1
         self.discount_factor = 0.9
         self.epsilon = 0.1
-        self.num_actions = 4 #TODO : update depending on the action number
+        self.num_actions =4 #TODO : update depending on the action number
         self.num_states = 300
 
         # Initialize Q-table
@@ -33,6 +34,7 @@ class MyDroneQLearningSimple(DroneAbstract):
 
         # Memory for the past visited positions
         self.visited_positions = set()
+        
 
         
     def define_message_for_all(self):
@@ -76,11 +78,11 @@ class MyDroneQLearningSimple(DroneAbstract):
         if action == 0:
             command["forward"] = 0.4
         elif action == 1:
-            command["rotation"] = 1
+            command["rotation"] = 0.8
         elif action == 2:
             command["forward"] = -0.1
         elif action == 3:
-            command["rotation"] = -1
+            command["rotation"] = -0.8
         # elif action == 4:
         #     command["forward"] = 0.8
         # elif action == 5:
