@@ -131,7 +131,7 @@ class MyDronePledge(DroneAbstract):
             alpha_rot * command_comm["rotation"] \
             + (1 - alpha_rot) * command_lidar["rotation"]
         command["grasper"] = command_lidar["grasper"]
-
+        print(command_lidar)
         return command_lidar
         
     def process_lidar_sensor(self, the_lidar_sensor):
@@ -139,7 +139,7 @@ class MyDronePledge(DroneAbstract):
                    "lateral": 0.0,
                    "rotation": 0.0,
                     "grasper" : 0.0}
-        angular_vel_controller = 0.7
+        angular_vel_controller = 1
 
         values = the_lidar_sensor.get_sensor_values()
         
@@ -175,13 +175,13 @@ class MyDronePledge(DroneAbstract):
         #TODO : faire une fonction qui permet d'ajuster la rotation en fonction de l'angle duquel le drone doit tourner pour mettre le mur sur sa droite pour que ça soit plus rapide
         if near_angle>=0 and near_angle<=np.pi/2:
             # Pure rotation on the left to put the wall on its right
-            command = {"forward": 0.0,
+            command = {"forward": 0.1,
                        "lateral": 0.0,
                        "rotation": 1.0,
                        "grasper": 0}
         elif near_angle>np.pi/2:
             # Pure rotation on the right to put the wall on its right
-            command = {"forward": 0.0,
+            command = {"forward": 0.1,
                        "lateral": 0.0,
                        "rotation": -1.0,
                        "grasper": 0}
@@ -192,7 +192,7 @@ class MyDronePledge(DroneAbstract):
                        "rotation": 1.0,
                        "grasper": 0}
         else : 
-            command = {"forward": 0.2,
+            command = {"forward": 0.1,
                        "lateral": 0.0,
                        "rotation": -1.0,
                        "grasper": 0} 
@@ -205,7 +205,7 @@ class MyDronePledge(DroneAbstract):
                 command["rotation"] = -angular_vel_controller
             else:
                 command["rotation"] = angular_vel_controller
-
+        
         return command, collision
     
      
