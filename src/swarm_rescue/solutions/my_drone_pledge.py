@@ -33,7 +33,7 @@ class MyDronePledge(DroneAbstract):
                          **kwargs)
         self.state = self.Activity.INITIALIZING
         self.initialized = False
-        self.pledge = 0
+ 
 
     def define_message_for_all(self):
         """
@@ -142,7 +142,7 @@ class MyDronePledge(DroneAbstract):
         angular_vel_controller = 0.7
 
         values = the_lidar_sensor.get_sensor_values()
-
+        
         if values is None:
             return command, False
 
@@ -192,7 +192,7 @@ class MyDronePledge(DroneAbstract):
                        "rotation": 1.0,
                        "grasper": 0}
         else : 
-            command = {"forward": 0.3,
+            command = {"forward": 0.2,
                        "lateral": 0.0,
                        "rotation": -1.0,
                        "grasper": 0} 
