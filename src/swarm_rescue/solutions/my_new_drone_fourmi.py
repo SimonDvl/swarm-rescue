@@ -136,44 +136,81 @@ class MyNewDroneFourmi(DroneAbstract):
     #     return command
     
     def control_wall(self):
-        command_straight = {"forward": 0.3,
-                            "lateral": 0.0,
-                            "rotation": 0.0,
-                            "grasper": 0}
+        # command_straight = {"forward": 0.3,
+        #                     "lateral": 0.0,
+        #                     "rotation": 0.0,
+        #                     "grasper": 0}
 
-        command_right = {"forward": 0.5,  # freiner l'inertie
-                         "lateral": -0.9,
-                         "rotation": -0.4,
-                         "grasper": 0}
+        # command_right = {"forward": 0.5,  # freiner l'inertie
+        #                  "lateral": -0.9,
+        #                  "rotation": -0.4,
+        #                  "grasper": 0}
 
-        command_turn = {"forward": 0.0,
-                        "lateral": 0.0,
-                        "rotation": 0.5,  # increase if too slow but it should ensure that we don't miss the moment when the wall is on the right
-                        "grasper": 0}
+        # command_turn = {"forward": 0.0,
+        #                 "lateral": 0.0,
+        #                 "rotation": 0.5,  # increase if too slow but it should ensure that we don't miss the moment when the wall is on the right
+        #                 "grasper": 0}
 
-        command_left = {"forward": 0.0,
-                        "lateral": 0.0,
-                        "rotation": 1,
-                        "grasper": 0}
+        # command_left = {"forward": 0.0,
+        #                 "lateral": 0.0,
+        #                 "rotation": 1,
+        #                 "grasper": 0}
 
-        touch_array = self.lidar_wall_touch()
-        print(touch_array[-1])
-        # Initialization -> Go straight to wall
-
-        # when the drone doesn't touch any wall i.e. case when he is lost
-        if touch_array[-1] == 0.0:
-            return command_straight
+        command = {"forward": 0.0,
+                    "lateral": 0.0,
+                    "rotation": 0.0,
+                    "grasper": 0.0}
         
-        # when the drone touches a wall, first the drone must put the wall on his right (rotation if necessary) and then go straight forward
-        elif touch_array[-1] == 1.0:
+        touch_array = self.lidar_wall_touch()
+        touch_counter = len(touch_array)
+        
+        # Initialization -> Go straight to wall when the drone doesn't touch any wall i.e. case when he is lost
+        if touch_counter == 0:
+            command["forward"] = 1.0
+        
+        # When the drone touches a wall, first the drone must put the wall on his right (rotation if necessary) and then go straight forward
+        elif touch_counter == 1.0:
             self.initialized = True
-            if (touch_array[0]) <= (1.05*np.pi/180): 
-                return command_straight
+            # Case when the drone is parallel to the wall 
+            if touch_array[0]<-0.6*np.pi/2 and touch_array[0]>-1.1*np.pi/2 : 
+                command["forward"] = 0.7
+                # Get further to the wall if too close
+                if min(self.lidar().get_sensor_values())<30:
+                    command['lateral'] = 0.3
+
+            elif touch_array[0]>-0.6*np.pi/2 and touch_array[0]<= 0:
+                command['forward'] = 0.0
+                command["rotation"] = 1.0
+                command["lateral"] = 0.0
+            elif touch_array[0]>-np.pi and touch_array[0]<= -1.1*np.pi/2:
+                command['forward'] = 0.0
+                command["rotation"] = -1.0
+                command['lateral'] = -0.2
+            elif touch_array[0]>0 and touch_array[0]<=np.pi/2:
+                command["rotation"] = 1.0
             else:
-                return command_turn
-        elif touch_array[-1] == 2.0:  # when the drone is in a corner
+                command["rotation"] = -1.0
+                
+        # When the drone is in a corner        
+        else: 
             self.initialized = True
-            return command_left
+            command["forward"] = 0.0
+            command["rotation"] = 1.0
+            
+        # Avoid collision anyway
+        
+        collision_dist = min(self.lidar().get_sensor_values())<50
+        
+        # collision_angle = self.lidar().ray_angles[np.argmin(collision_dist)]
+        # if collision_dist<50 and collision_angle<0:
+        #     command["rotation"] = 1.0
+        #     command["forward"] = 1.0
+        # # else:
+        # #     command["rotation"] = 1.0
+        # #     command["forward"] = 1.0
+            
+        return command
+            
 
     def process_semantic_sensor(self, the_semantic_sensor):
         """
@@ -230,52 +267,99 @@ class MyNewDroneFourmi(DroneAbstract):
 
         return found_wounded, found_rescue_center, command
     
-    def process_lidar_sensor(self, the_lidar_sensor):
-        command = {"forward": 1.0,
-                   "lateral": 0.0,
-                   "rotation": 0.0}
-        angular_vel_controller = 0.5
+    # def process_lidar_sensor(self, the_lidar_sensor):
+    #     command = {"forward": 1.0,
+    #                "lateral": 0.0,
+    #                "rotation": 0.0}
+    #     angular_vel_controller = 0.5
 
+    #     values = the_lidar_sensor.get_sensor_values()
+
+    #     if values is None:
+    #         return command, False
+
+    #     ray_angles = the_lidar_sensor.ray_angles
+    #     size = the_lidar_sensor.resolution
+
+    #     far_angle_raw = 0
+    #     near_angle_raw = 0
+    #     min_dist = 1000
+    #     if size != 0:
+    #         # far_angle_raw : angle with the longer distance
+    #         far_angle_raw = ray_angles[np.argmax(values)]
+    #         min_dist = min(values)
+    #         # near_angle_raw : angle with the nearest distance
+    #         near_angle_raw = ray_angles[np.argmin(values)]
+
+    #     far_angle = far_angle_raw
+    #     # If far_angle_raw is small then far_angle = 0
+    #     if abs(far_angle) < 1 / 180 * np.pi:
+    #         far_angle = 0.0
+
+    #     near_angle = near_angle_raw
+    #     far_angle = normalize_angle(far_angle)
+
+    #     # If near a wall then 'collision' is True and the drone tries to turn its back to the wall
+    #     collision = False
+    #     if size != 0 and min_dist < 50:
+    #         collision = True
+    #         if near_angle > 0:
+    #             command["rotation"] = -angular_vel_controller
+    #         else:
+    #             command["rotation"] = angular_vel_controller
+
+    #     return command, collision
+    
+    def lidar_wall_touch(self):
+        """
+        Returns an array with the angle(s) for which a wall is the closest (can be 0,1,2)
+        """
+
+        the_lidar_sensor = self.lidar()
         values = the_lidar_sensor.get_sensor_values()
-
+        values_copy = values.copy()
+        
+        angles = np.zeros(2)
         if values is None:
-            return command, False
+            return angles
+
 
         ray_angles = the_lidar_sensor.ray_angles
-        size = the_lidar_sensor.resolution
+        ray_angles_copy = ray_angles.copy()
 
-        far_angle_raw = 0
-        near_angle_raw = 0
-        min_dist = 1000
-        if size != 0:
-            # far_angle_raw : angle with the longer distance
-            far_angle_raw = ray_angles[np.argmax(values)]
-            min_dist = min(values)
-            # near_angle_raw : angle with the nearest distance
-            near_angle_raw = ray_angles[np.argmin(values)]
+        # Get the two lower values and get the corresponding angles
+        min_dist_1 = min(values_copy)
+        near_angle_1 = ray_angles_copy[np.argmin(values_copy)]
+        
+        # Remove the minimum value and the corresponding angle
+        values_copy = np.delete(values_copy,np.argmin(values_copy))
+        ray_angles_copy = np.delete(values_copy,np.argmin(values_copy))
+        
+        min_dist_2 = min(values_copy)
+        near_angle_2 = ray_angles[np.argmin(values_copy)]
 
-        far_angle = far_angle_raw
-        # If far_angle_raw is small then far_angle = 0
-        if abs(far_angle) < 1 / 180 * np.pi:
-            far_angle = 0.0
+        # Store values in arrays
+        near_angle = np.array([near_angle_1,near_angle_2])
+        min_dist = np.array([min_dist_1, min_dist_2])
+        
+        # Check if we are close to a wall and keep the corresponding values
+        threshold = 100
+        for i in range(1):
+            if min_dist[i] > threshold:
+                near_angle = np.delete(near_angle, i)
+        
+        # Check if the two angles are close to each other (less than 20°)   
+        if len(near_angle)==2:
+            near_angle_normalized = normalize_angle(near_angle)
+            angle_diff = abs(near_angle_normalized[0]-near_angle_normalized[1])
+            if angle_diff <20 * np.pi/180:
+                near_angle = np.delete(near_angle,0)
+        print(near_angle)
+        return(near_angle)
 
-        near_angle = near_angle_raw
-        far_angle = normalize_angle(far_angle)
-
-        # If near a wall then 'collision' is True and the drone tries to turn its back to the wall
-        collision = False
-        if size != 0 and min_dist < 50:
-            collision = True
-            if near_angle > 0:
-                command["rotation"] = -angular_vel_controller
-            else:
-                command["rotation"] = angular_vel_controller
-
-        return command, collision
-    
     # def lidar_wall_touch(self):
     #     """
-    #     Returns an array with the angle(s) for which a wall is the closest and the number of touch (can be 0,1,2)
+    #     Returns an array with the angle(s) for which a wall is the closest and the number of touch (can be 0, 1, or 2)
     #     """
 
     #     the_lidar_sensor = self.lidar()
@@ -284,63 +368,24 @@ class MyNewDroneFourmi(DroneAbstract):
     #     touch_counter = 0
     #     angles = np.zeros(3)
     #     if values is None:
-    #         return angles
-
+    #         return np.zeros(3)
 
     #     ray_angles = the_lidar_sensor.ray_angles
 
     #     # Get the angles from the two lower values
     #     sorted_indices = np.argpartition(values, 2)[:2]
-
+    #     print("sorted indices", sorted_indices)
+    #     print("angles values", values[sorted_indices])
     #     # Check if a wall is close according to a threshold
-    #     threshold = 150
-    #     j=0
-    #     for i in sorted_indices:
+    #     threshold = 100
+    #     for j, i in enumerate(sorted_indices[:2]):
     #         if values[i] < threshold:
-    #             touch_counter+=1
+    #             touch_counter += 1
     #             angles[j] = ray_angles[i]
-    #             j+=1
-        
-    #     print(angles)
-    #     if touch_counter == 2 and abs(angles[0]-angles[1]) < (np.pi/180): 
+
+    #     if touch_counter == 2 and abs(angles[0] - angles[1]) < (20*2*np.pi/180):
     #         # Consecutive angles are assimilated with only one touch
     #         touch_counter = 1
     #         angles = angles[1:]
-                
-    #     angles[-1] = touch_counter
 
-
-    #     return(angles)
-
-    def lidar_wall_touch(self):
-        """
-        Returns an array with the angle(s) for which a wall is the closest and the number of touch (can be 0, 1, or 2)
-        """
-
-        the_lidar_sensor = self.lidar()
-        values = the_lidar_sensor.get_sensor_values()
-
-        touch_counter = 0
-        angles = np.zeros(3)
-        if values is None:
-            return np.zeros(3)
-
-        ray_angles = the_lidar_sensor.ray_angles
-
-        # Get the angles from the two lower values
-        sorted_indices = np.argpartition(values, 2)[:2]
-        print("sorted indices", sorted_indices)
-        print("angles values", values[sorted_indices])
-        # Check if a wall is close according to a threshold
-        threshold = 100
-        for j, i in enumerate(sorted_indices[:2]):
-            if values[i] < threshold:
-                touch_counter += 1
-                angles[j] = ray_angles[i]
-
-        if touch_counter == 2 and abs(angles[0] - angles[1]) < (20*2*np.pi/180):
-            # Consecutive angles are assimilated with only one touch
-            touch_counter = 1
-            angles = angles[1:]
-
-        return np.concatenate([angles, [touch_counter]])
+    #     return np.concatenate([angles, [touch_counter]])
