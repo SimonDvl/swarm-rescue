@@ -9,6 +9,10 @@ from spg_overlay.entities.drone_abstract import DroneAbstract
 from spg_overlay.utils.misc_data import MiscData
 from spg_overlay.utils.utils import normalize_angle, sign
 from spg_overlay.entities.drone_distance_sensors import DroneSemanticSensor
+from solutions.mapping import OccupancyGrid
+from spg_overlay.utils.pose import Pose
+from solutions.astar import astar
+
 
 
 class MyNewDroneFourmi(DroneAbstract):
@@ -33,7 +37,21 @@ class MyNewDroneFourmi(DroneAbstract):
                          **kwargs)
         self.state = self.Activity.INITIALIZING
         self.initialized = False
+        
+        self.iteration: int = 0
+        self.estimated_pose = Pose()
 
+        resolution = 20 # Resolution de la grille 
+        #TODO: essayer de faire varier la résolution de la grille pour accélérer l'algo A* 
+        self.grid = OccupancyGrid(size_area_world=self.size_area,
+                                  resolution=resolution,
+                                  lidar=self.lidar())
+        
+        
+        self.rescue_center = (0,0)
+        self.best_path= []
+        
+        
     def define_message_for_all(self):
         """
         Define the message, the drone will send to and receive from other surrounding drones.
@@ -41,12 +59,14 @@ class MyNewDroneFourmi(DroneAbstract):
         msg_data = (self.identifier,
                     (self.measured_gps_position(), self.measured_compass_angle()))
         return msg_data
-
+    
     def control(self):
+        """
+        Control the drone, update the state machine and compute the command depending on the state
+        """
         found_wounded, found_rescue_center, command_semantic = self.process_semantic_sensor(self.semantic())
-        print(self.state)
+        
         # TRANSITIONS OF THE STATE MACHINE
-
         if self.state is self.Activity.INITIALIZING and found_wounded:
             self.state = self.Activity.GRASPING_WOUNDED
 
@@ -67,6 +87,12 @@ class MyNewDroneFourmi(DroneAbstract):
 
         elif self.state is self.Activity.DROPPING_AT_RESCUE_CENTER and not found_rescue_center:
             self.state = self.Activity.SEARCHING_RESCUE_CENTER
+        
+        #TODO : Quand le drone a deposé la victime au rescue center, faire en sorte que le drone reparte chercher des victimes et repasser le grasper à 0
+        #TODO : Idée : reparcourir le best path en sens inverse pour le faire retourner là où il a recup la victime et éviter de suivre à nouveau le mur, puis reprendre l'explo fourmi
+        # if self.state is self.Activity.DROPPING_AT_RESCUE_CENTER and not found_wounded:
+        #     self.state = self.Activity.SEARCHING_WOUNDED
+
 
         '''
         print("state: {}, can_grasp: {}, grasped entities: {}, found wounded: {}".format(self.state.name,
@@ -78,6 +104,7 @@ class MyNewDroneFourmi(DroneAbstract):
                                                                                         self.base.grasper.grasped_entities,
                                                                                         found_wounded))
         '''
+        
         ##########
         # COMMANDS FOR EACH STATE
         # Searching by following wall, but when a rescue center or wounded person is detected, we use a special command
@@ -100,62 +127,92 @@ class MyNewDroneFourmi(DroneAbstract):
             command["grasper"] = 1
 
         elif self.state is self.Activity.SEARCHING_RESCUE_CENTER:
-            command = self.control_wall()
+            # Compute best path to come back to rescue center
+            if len(self.best_path) == 0 : 
+                #TODO : ajouter le cas ou il ne trouve pas de meilleur chemin => control wall
+                self.best_path = self.compute_best_path()
+            command = self.follow_trajectory(self.best_path)
+            # command = self.control_wall()
             command["grasper"] = 1
 
         elif self.state is self.Activity.DROPPING_AT_RESCUE_CENTER:
             command = command_semantic
             command["grasper"] = 1
+            
+        ###### Update the map ######
+        #TODO : 1) faire en sorte qu'un seul drone actualise la map quand d'autres drones sont à portée puis la partage sinon c'est lent
+        #TODO : 2) problème de detection du lidar: considère les autres drones/ victimes comme des murs (pb pour l'algo a*)
+        # increment the iteration counter
+        self.iteration += 1
 
-        return command
+        self.estimated_pose = Pose(np.asarray(self.measured_gps_position()), self.measured_compass_angle())
 
-    # def update_command(self):
+        self.grid.update_grid(pose=self.estimated_pose)
+        if self.iteration % 5 == 0:
+            self.grid.display(self.grid.grid, self.estimated_pose, title="occupancy grid")
+            self.grid.display(self.grid.zoomed_grid, self.estimated_pose, title="zoomed occupancy grid")
 
-    #     the_lidar_sensor = self.lidar()
-    #     values = the_lidar_sensor.get_sensor_values()
-    #     distance_to_wall = 100  # Distance cible par rapport au mur
-    #     gain = 0.1  # Facteur de correction proportionnel
-    #     command = {"forward": 1.0, "lateral": 0.0, "rotation": 0.0, "grasper": 0}
-
-    #     # Trouver l'angle où le mur est le plus proche
-    #     min_index = np.argmin(values)
-    #     closest_distance = values[min_index]
-
-    #     # Calculer l'erreur par rapport à la distance cible
-    #     error = closest_distance - distance_to_wall
-
-    #     # Correction proportionnelle pour ajuster la distance au mur
-    #     lateral_correction = gain * error
-
-    #     # Mettre à jour la commande
-    #     command["lateral"] = lateral_correction
-
-    #     # Rotation pour maintenir le mur à droite
-    #     command["rotation"] = -0.1  # Ajustez cette valeur selon les besoins
-
-    #     return command
+        
+        ###### Keep de location of the rescue center in memory ######
+        
+        the_semantic_sensor = self.semantic()
+        detection_semantic = the_semantic_sensor.get_sensor_values()
+        if self.rescue_center == (0,0) : 
+            #TODO : modifier pour que ça soit vraiment la position du rescue center et pas sa position de départ
+            initial_position = self.gps().get_sensor_values()
+            self.rescue_center = (initial_position[0], initial_position[1])
+            # for data in detection_semantic : 
+            #     if data.entity_type == DroneSemanticSensor.TypeEntity.RESCUE_CENTER:
+            #         self.rescue_center = self.compute_position_from_distance_angle(data.distance, data.angle)
+            #         print("RESCUE CENTER POSITION", self.rescue_center, 'DRONE POSITION', self.gps().get_sensor_values(),"DATA", DeprecationWarning)
+                
+        
     
+        return command
+    
+    
+    def compute_best_path(self):
+        """
+        Compute the best path to come back to rescue center using the A* algorithm 
+        
+        Returns a list of position tuple
+        """
+        
+        drone_position = self.gps().get_sensor_values()
+        drone_position_on_grid_x, drone_position_on_grid_y  = self.grid._conv_world_to_grid(drone_position[0],drone_position[1]) 
+        start_point = (drone_position_on_grid_x, drone_position_on_grid_y)
+        
+        rescue_center_on_grid_x, rescue_center_on_grid_y= self.grid._conv_world_to_grid(self.rescue_center[0], self.rescue_center[1])
+        end_point = (rescue_center_on_grid_x,rescue_center_on_grid_y)
+    
+        best_path_grid = astar(start_point, end_point, self.grid.grid)
+        best_path_world=[]
+        for element in best_path_grid:
+            x_real_world,y_real_world = self.grid._conv_grid_to_world(element[0],element[1])
+            best_path_world.append((x_real_world,y_real_world))
+                    
+        return best_path_world
+    
+    def compute_position_from_distance_angle(self, distance, angle):
+        """
+        Compute the position from a distance, an angle and from the position of the drone
+        """
+        # Get drone position
+        drone_position = self.gps().get_sensor_values()
+        x = drone_position[0]
+        y = drone_position[1]
+        
+        # Compute the position of rescue center 
+        x_rescue_center = distance*np.cos(angle) + x
+        y_rescue_center = distance*np.sin(angle) + y
+        
+        return(x_rescue_center,y_rescue_center)
+        
+        
     def control_wall(self):
-        # command_straight = {"forward": 0.3,
-        #                     "lateral": 0.0,
-        #                     "rotation": 0.0,
-        #                     "grasper": 0}
-
-        # command_right = {"forward": 0.5,  # freiner l'inertie
-        #                  "lateral": -0.9,
-        #                  "rotation": -0.4,
-        #                  "grasper": 0}
-
-        # command_turn = {"forward": 0.0,
-        #                 "lateral": 0.0,
-        #                 "rotation": 0.5,  # increase if too slow but it should ensure that we don't miss the moment when the wall is on the right
-        #                 "grasper": 0}
-
-        # command_left = {"forward": 0.0,
-        #                 "lateral": 0.0,
-        #                 "rotation": 1,
-        #                 "grasper": 0}
-
+        """
+        Compute the command to make the drone follows the right wall while avoiding collision with it
+        """
         command = {"forward": 0.0,
                     "lateral": 0.0,
                     "rotation": 0.0,
@@ -171,23 +228,27 @@ class MyNewDroneFourmi(DroneAbstract):
         # When the drone touches a wall, first the drone must put the wall on his right (rotation if necessary) and then go straight forward
         elif touch_counter == 1.0:
             self.initialized = True
+            
             # Case when the drone is parallel to the wall 
             if touch_array[0]<-0.6*np.pi/2 and touch_array[0]>-1.1*np.pi/2 : 
                 command["forward"] = 0.7
                 # Get further to the wall if too close
                 if min(self.lidar().get_sensor_values())<30:
                     command['lateral'] = 0.3
-
+                    
             elif touch_array[0]>-0.6*np.pi/2 and touch_array[0]<= 0:
                 command['forward'] = 0.0
                 command["rotation"] = 1.0
                 command["lateral"] = 0.0
+                
             elif touch_array[0]>-np.pi and touch_array[0]<= -1.1*np.pi/2:
                 command['forward'] = 0.0
                 command["rotation"] = -1.0
-                command['lateral'] = -0.2
+                command['lateral'] = -0.2 # Lateral force to maintain the drone close enough to the wall it follows
+                
             elif touch_array[0]>0 and touch_array[0]<=np.pi/2:
                 command["rotation"] = 1.0
+                
             else:
                 command["rotation"] = -1.0
                 
@@ -196,18 +257,6 @@ class MyNewDroneFourmi(DroneAbstract):
             self.initialized = True
             command["forward"] = 0.0
             command["rotation"] = 1.0
-            
-        # Avoid collision anyway
-        
-        collision_dist = min(self.lidar().get_sensor_values())<50
-        
-        # collision_angle = self.lidar().ray_angles[np.argmin(collision_dist)]
-        # if collision_dist<50 and collision_angle<0:
-        #     command["rotation"] = 1.0
-        #     command["forward"] = 1.0
-        # # else:
-        # #     command["rotation"] = 1.0
-        # #     command["forward"] = 1.0
             
         return command
             
@@ -227,6 +276,7 @@ class MyNewDroneFourmi(DroneAbstract):
 
         found_wounded = False
         is_near_wounded = False
+        
         if (self.state is self.Activity.SEARCHING_WOUNDED
             or self.state is self.Activity.GRASPING_WOUNDED) \
                 and detection_semantic is not None:
@@ -239,6 +289,7 @@ class MyNewDroneFourmi(DroneAbstract):
 
         is_near_rescue = False
         found_rescue_center = False
+        
         if (self.state is self.Activity.SEARCHING_RESCUE_CENTER
             or self.state is self.Activity.DROPPING_AT_RESCUE_CENTER) \
                 and detection_semantic:
@@ -266,50 +317,7 @@ class MyNewDroneFourmi(DroneAbstract):
             command["rotation"] = -1.0
 
         return found_wounded, found_rescue_center, command
-    
-    # def process_lidar_sensor(self, the_lidar_sensor):
-    #     command = {"forward": 1.0,
-    #                "lateral": 0.0,
-    #                "rotation": 0.0}
-    #     angular_vel_controller = 0.5
-
-    #     values = the_lidar_sensor.get_sensor_values()
-
-    #     if values is None:
-    #         return command, False
-
-    #     ray_angles = the_lidar_sensor.ray_angles
-    #     size = the_lidar_sensor.resolution
-
-    #     far_angle_raw = 0
-    #     near_angle_raw = 0
-    #     min_dist = 1000
-    #     if size != 0:
-    #         # far_angle_raw : angle with the longer distance
-    #         far_angle_raw = ray_angles[np.argmax(values)]
-    #         min_dist = min(values)
-    #         # near_angle_raw : angle with the nearest distance
-    #         near_angle_raw = ray_angles[np.argmin(values)]
-
-    #     far_angle = far_angle_raw
-    #     # If far_angle_raw is small then far_angle = 0
-    #     if abs(far_angle) < 1 / 180 * np.pi:
-    #         far_angle = 0.0
-
-    #     near_angle = near_angle_raw
-    #     far_angle = normalize_angle(far_angle)
-
-    #     # If near a wall then 'collision' is True and the drone tries to turn its back to the wall
-    #     collision = False
-    #     if size != 0 and min_dist < 50:
-    #         collision = True
-    #         if near_angle > 0:
-    #             command["rotation"] = -angular_vel_controller
-    #         else:
-    #             command["rotation"] = angular_vel_controller
-
-    #     return command, collision
-    
+        
     def lidar_wall_touch(self):
         """
         Returns an array with the angle(s) for which a wall is the closest (can be 0,1,2)
@@ -356,36 +364,53 @@ class MyNewDroneFourmi(DroneAbstract):
                 near_angle = np.delete(near_angle,0)
         print(near_angle)
         return(near_angle)
+    
+    
+    def follow_trajectory(self, trajectory):
+        """
+        Follow a predefined trajectory using proportional control
+        """
+        command = {"forward": 0.0,
+                   "lateral": 0.0,
+                   "rotation": 0.0,
+                   "grasper": 0.0}
 
-    # def lidar_wall_touch(self):
-    #     """
-    #     Returns an array with the angle(s) for which a wall is the closest and the number of touch (can be 0, 1, or 2)
-    #     """
+        if trajectory is None:
+            return command  # No trajectory to follow i.e. when the best path algorithm did not work
 
-    #     the_lidar_sensor = self.lidar()
-    #     values = the_lidar_sensor.get_sensor_values()
+        # Get current drone position and orientation
+        current_position = self.gps().get_sensor_values()
+        current_orientation = self.true_angle()
 
-    #     touch_counter = 0
-    #     angles = np.zeros(3)
-    #     if values is None:
-    #         return np.zeros(3)
+        # Get the first point in the trajectory
+        target_position = trajectory[0]
 
-    #     ray_angles = the_lidar_sensor.ray_angles
+        # Compute the vector from the drone to the target
+        vector_to_target = np.array(target_position) - np.array(current_position)
 
-    #     # Get the angles from the two lower values
-    #     sorted_indices = np.argpartition(values, 2)[:2]
-    #     print("sorted indices", sorted_indices)
-    #     print("angles values", values[sorted_indices])
-    #     # Check if a wall is close according to a threshold
-    #     threshold = 100
-    #     for j, i in enumerate(sorted_indices[:2]):
-    #         if values[i] < threshold:
-    #             touch_counter += 1
-    #             angles[j] = ray_angles[i]
+        # Calculate the angle between the drone's orientation and the vector to the target
+        angle_to_target = math.atan2(vector_to_target[1], vector_to_target[0])
 
-    #     if touch_counter == 2 and abs(angles[0] - angles[1]) < (20*2*np.pi/180):
-    #         # Consecutive angles are assimilated with only one touch
-    #         touch_counter = 1
-    #         angles = angles[1:]
+        # Proportional control for rotation
+        angle_difference = normalize_angle(angle_to_target - current_orientation)
+        rotation_gain = 0.6
+        command["rotation"] = max(-1.0,min(1.0,rotation_gain * angle_difference))
 
-    #     return np.concatenate([angles, [touch_counter]])
+        # Proportional control for forward movement
+        distance_to_target = np.linalg.norm(vector_to_target)
+        forward_gain = 0.05
+        command["forward"] = max(-1.0,min(1.0, forward_gain * distance_to_target))
+
+        # Remove the point from the trajectory list when close to it
+        if distance_to_target < 70:
+            trajectory.pop(0) 
+        
+        # Repulsive force to avoid the walls
+        if min(self.lidar().get_sensor_values())<50:
+            touch_array = self.lidar_wall_touch()
+            if touch_array[0]>=0 and touch_array[0]<=np.pi:
+                command["lateral"] = -0.5
+            else:
+                command["lateral"] = +0.5
+
+        return command
