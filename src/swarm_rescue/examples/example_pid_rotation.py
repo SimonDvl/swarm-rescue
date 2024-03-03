@@ -29,7 +29,7 @@ class MyDronePid(DroneAbstract):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.counter = 0
-        self.angle_consigne = 0
+        self.angle_consigne = np.pi/3
         self.counter_change_direction = 40
 
         self.iter_path = 0
@@ -57,7 +57,7 @@ class MyDronePid(DroneAbstract):
         if self.counter % self.counter_change_direction == 0:
             self.angle_consigne = normalize_angle(self.angle_consigne + np.pi / 2)
             print("*******************************")
-
+        print("CONSIGNE",self.angle_consigne)
         diff_angle = normalize_angle(self.angle_consigne - self.true_angle())
 
         deriv_diff_angle = normalize_angle(diff_angle - self.prev_diff_angle)

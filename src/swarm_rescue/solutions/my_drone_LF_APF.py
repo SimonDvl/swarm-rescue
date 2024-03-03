@@ -9,7 +9,7 @@ from spg_overlay.utils.misc_data import MiscData
 from spg_overlay.utils.utils import normalize_angle, sign
 
 
-class MyDroneLidarCommunication(DroneAbstract):
+class MyDroneLFAPF(DroneAbstract):
     def __init__(self,
                  identifier: Optional[int] = None,
                  misc_data: Optional[MiscData] = None,

@@ -54,11 +54,19 @@ class OccupancyGrid(Grid):
         lidar : lidar data
         pose : corrected pose in world coordinates
         """
+        # EVERY_N = 3
+        # LIDAR_DIST_CLIP = 40.0
+        # EMPTY_ZONE_VALUE = -0.602
+        # OBSTACLE_ZONE_VALUE = 2.0
+        # FREE_ZONE_VALUE = -4.0
+        # THRESHOLD_MIN = -40
+        # THRESHOLD_MAX = 40
+        
         EVERY_N = 3
         LIDAR_DIST_CLIP = 40.0
-        EMPTY_ZONE_VALUE = -0.602
+        EMPTY_ZONE_VALUE = 0.0
         OBSTACLE_ZONE_VALUE = 2.0
-        FREE_ZONE_VALUE = -4.0
+        FREE_ZONE_VALUE = -2.0
         THRESHOLD_MIN = -40
         THRESHOLD_MAX = 40
 
@@ -114,7 +122,7 @@ class MyDroneMapping(DroneAbstract):
 
         self.estimated_pose = Pose()
 
-        resolution = 8
+        resolution = 20
         self.grid = OccupancyGrid(size_area_world=self.size_area,
                                   resolution=resolution,
                                   lidar=self.lidar())

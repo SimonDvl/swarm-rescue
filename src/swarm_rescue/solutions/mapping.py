@@ -55,7 +55,7 @@ class OccupancyGrid(Grid):
         pose : corrected pose in world coordinates
         """
         # Adapte les valeurs de example_mapping pour faire une map avec des coûts compréhensibles pour l'algorithme A*
-        EVERY_N = 3 #TODO : Essayer d'augmenter ça pour faire un mapping moins regulièrement et limiter les ralentissments quand il y a plusieurs drones
+        EVERY_N = 50 #TODO : Essayer d'augmenter ça pour faire un mapping moins regulièrement et limiter les ralentissments quand il y a plusieurs drones
         LIDAR_DIST_CLIP = 40.0
         EMPTY_ZONE_VALUE = 0.0
         OBSTACLE_ZONE_VALUE = 2.0
@@ -65,7 +65,7 @@ class OccupancyGrid(Grid):
 
         lidar_dist = self.lidar.get_sensor_values()[::EVERY_N].copy()
         lidar_angles = self.lidar.ray_angles[::EVERY_N].copy()
-
+        
         # Compute cos and sin of the absolute angle of the lidar
         cos_rays = np.cos(lidar_angles + pose.orientation)
         sin_rays = np.sin(lidar_angles + pose.orientation)
@@ -92,7 +92,7 @@ class OccupancyGrid(Grid):
 
         points_x = points_x[select_collision]
         points_y = points_y[select_collision]
-
+        #TODO : add a check to see wether the obstacle is a victim or a drone
         self.add_points(points_x, points_y, OBSTACLE_ZONE_VALUE)
 
         # the current position of the drone is free !
@@ -115,7 +115,7 @@ class MyDroneMapping(DroneAbstract):
 
         self.estimated_pose = Pose()
 
-        resolution = 20
+        resolution = 5
         self.grid = OccupancyGrid(size_area_world=self.size_area,
                                   resolution=resolution,
                                   lidar=self.lidar())
