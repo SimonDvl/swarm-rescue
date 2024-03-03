@@ -281,7 +281,7 @@ class MyNewDroneFourmi(DroneAbstract):
             
             # Adjust lateral command for maintaining distance from the wall
             lateral_gain = 0.05 # Adjust 
-            lateral_distance = 50 # Desired lateral distance from the wall
+            lateral_distance = 20 # Desired lateral distance from the wall
 
             lateral_error = lateral_distance - min(self.lidar().get_sensor_values())
             command["lateral"] = max(-1.0, min(1.0,lateral_gain * lateral_error))
